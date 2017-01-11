@@ -141,6 +141,7 @@ class MarathonSparkSpawner(Spawner):
             for var in os.environ:
                 if var.lower().startswith("l41"):
                     pyspark_submit_args.append("--conf spark.executorEnv.%s=%s" % (var, os.environ[var]))
+            os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join(pyspark_submit_args)
             env["PYSPARK_SUBMIT_ARGS"] = " ".join(pyspark_submit_args)
         return env
 
