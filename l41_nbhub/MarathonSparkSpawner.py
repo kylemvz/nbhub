@@ -9,11 +9,6 @@ from tornado.web import HTTPError
 from jupyterhub.spawner import Spawner
 from .QueryUser import query_user
 from .sparkmarathon import Marathon
-from .GPUResourceAllocator import GPUResourceAllocator
-
-import logging
-
-logger = logging.getLogger(__name__)
 
 class MarathonSparkSpawner(Spawner):
     '''
@@ -155,15 +150,7 @@ class MarathonSparkSpawner(Spawner):
     def start(self):
         print('HUB URI:', self.hub.api_url)
         container_name = self.get_container_name()
-        #hostname, gpu_id = self.gpu_resources.get_host_id(self.user.name)
-        #driver_version = self.gpu_resources.get_driver_version(hostname)
-        #print('Hostname: {} GPU ID: {}'.format(hostname, gpu_id))
         parameters = [{'key':'workdir', 'value':os.path.join(self.home_basepath, self.user.name)}]
-        #parameters.append({'key': 'device', 'value': '/dev/nvidiactl'})
-        #parameters.append({'key': 'device', 'value': '/dev/nvidia-uvm'})
-        #parameters.append({'key': 'device', 'value': '/dev/nvidia%d'%gpu_id})
-        #parameters.append({'key': 'volume-driver', 'value': 'nvidia-docker'})
-        #parameters.append({'key': 'volume', 'value': 'nvidia_driver_{}:/usr/local/nvidia:ro'.format(driver_version)})
         cmd = "/bin/bash /srv/ganymede_nbserver/ganymede_nbserver.sh"
         self.ports = [self.get_notebook_port()]
         self.marathon.start_container(container_name,
@@ -178,14 +165,10 @@ class MarathonSparkSpawner(Spawner):
                           network_mode=self.network_mode)
 
         for i in range(self.start_timeout):
-            #logger.warning("Starting poll()")
             is_up = yield self.poll()
-            #logger.warning("Finished poll(): %s" % is_up)
             if is_up is None:
                 time.sleep(1)
-                logger.warning("Calling marathon get_ip_and_port()")
                 ip, port = self.marathon.get_ip_and_port(container_name)
-                logger.warning("IP: %s, PORT: %s" % (ip, port))
                 self.user.server.ip=ip
                 self.user.server.port = port
                 print('IP/PORT', ip, port)
@@ -210,12 +193,8 @@ class MarathonSparkSpawner(Spawner):
 
     @gen.coroutine
     def poll(self):
-        #logger.warning("Calling container_name()")
         name = self.get_container_name()
-        #logger.warning("Name: %s" % name)
-        #logger.warning("Calling container_status()")
         container_info = self.marathon.get_container_status(name)
-        logger.warning("Info: %s" % container_info)
 
         if container_info is None:
             return ""
