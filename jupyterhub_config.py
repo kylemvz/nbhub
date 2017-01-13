@@ -1,7 +1,7 @@
 import os
 import ast
 
-c.JupyterHub.spawner_class = 'l41_nbhub.MarathonSparkSpawner.MarathonSparkSpawner'
+c.JupyterHub.spawner_class = 'l41_nbhub.MarathonSpawner.MarathonSpawner'
 c.JupyterHub.authenticator_class = 'l41_nbhub.L41OAuthenticator.L41OAuthenticator'
 
 c.Authenticator.admin_users = [name.strip() for name in os.environ['JH_ADMIN_USERS'].split(",")]
