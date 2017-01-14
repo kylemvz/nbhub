@@ -8,7 +8,7 @@ from tornado.web import HTTPError
 
 from jupyterhub.spawner import Spawner
 from .QueryUser import query_user
-from .sparkmarathon import Marathon
+from .marathon import Marathon
 
 class MarathonSparkSpawner(Spawner):
     '''
@@ -77,7 +77,7 @@ class MarathonSparkSpawner(Spawner):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # All traitlets configurables are configured by now
-        self.marathon = Marathon(self.marathon_host)
+        self.marathon = Marathon(self.marathon_host, network_type=self.network_mode)
         '''
         self.gpu_resources = GPUResourceAllocator(self.resource_file_name,
                                                     self.status_file_name)

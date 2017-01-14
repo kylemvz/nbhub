@@ -23,8 +23,9 @@ default_request = {
 }
 
 class Marathon:
-    def __init__(self, hostname):
+    def __init__(self, hostname, network_type="BRIDGE"):
         self.hostname = hostname
+        self.network_type = network_type
 
     def _make_request(self, type, endpoint, data=None, json_data=None):
         url = os.path.join(self.hostname, endpoint)
@@ -130,9 +131,14 @@ class Marathon:
 
         hostname =running_task['host']
         # Resolve hostname to ip
-        ip = socket.gethostbyname(hostname)
+        if self.network_type == "BRIDGE":
+            ip = socket.gethostbyname(hostname)
+            port = running_task['ports'][0]
+        elif self.network_type == "HOST":
+            ip = hostname
+            port = container["env"]["NOTEBOOK_PORT"]
 
-        return (ip, running_task['ports'][0])
+        return (ip, port)
 
     def get_container_status(self, container_name):
         response = self._make_request('GET', 'v2/apps/%s'%container_name)
