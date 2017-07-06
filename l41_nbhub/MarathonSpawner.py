@@ -57,11 +57,13 @@ class MarathonSpawner(Spawner):
                                 config=True)
 
     def __init__(self, *args, **kwargs):
+        print("Initializing MarathonSpawner.")
         super().__init__(*args, **kwargs)
         # All traitlets configurables are configured by now
         self.marathon = Marathon(self.marathon_host)
         self.gpu_resources = GPUResourceAllocator(self.resource_file_name,
                                                     self.status_file_name)
+        print("Finished initializing MarathonSpawner.")
 
     def _expand_user_vars(self, string):
         """
