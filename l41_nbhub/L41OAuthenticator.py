@@ -6,7 +6,7 @@ from traitlets import Unicode
 #import ast
 
 class L41OAuthenticator(GitHubOAuthenticator):
-    username_map_file = Unicode('/docker_mnt/username_map',
+    username_map_file = Unicode('',
                          help="File or URI containing mapping of Github user names to local user names",
                          config=True)
 
