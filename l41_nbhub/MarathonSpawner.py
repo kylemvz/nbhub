@@ -155,9 +155,9 @@ class MarathonSpawner(Spawner):
             pass
         hostname, gpu_ids = self.gpu_resources.get_host_id(self.user.name, num_gpus)
         driver_version = self.gpu_resources.get_driver_version(hostname)
-        constraints.extend([
+        constraints = [
             ["hostname", "LIKE", hostname]
-        ])
+        ]
         parameters.extend([
             {"key": "device", "value": "/dev/nvidiactl"},
             {"key": "device", "value": "/dev/nvidia-uvm"},
@@ -173,7 +173,7 @@ class MarathonSpawner(Spawner):
     def start(self):
         print('HUB URI:', self.hub.api_url)
         container_name = self.get_container_name()
-        constraints = []
+        constraints = self.marathon_constraints
         parameters = []
 
         if self.num_gpus > 0:
@@ -184,7 +184,7 @@ class MarathonSpawner(Spawner):
         )
 
         volumes = self.volumes + self.runtime_vols
-        constraints = self.marathon_constraints + self.runtime_constraints + constraints
+        constraints = constraints + self.runtime_constraints
 
         #print(constraints, file=sys.stderr, flush=True)
         #print(parameters, file=sys.stderr, flush=True)
