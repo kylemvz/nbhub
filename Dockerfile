@@ -14,12 +14,12 @@ RUN apt-get -y install apt-transport-https ca-certificates && \
     apt-get -y install docker-engine
 
 # Install Ganymede Hub + dependencies
-RUN git clone https://github.com/jupyter/dockerspawner.git /srv/dockerspawner && \
-    pip install /srv/dockerspawner/. && \
-    rm -rf /srv/dockerspawner && \
-    git clone https://github.com/jupyter/oauthenticator.git /srv/oauthenticator && \
-    pip install /srv/oauthenticator/. && \
-    rm -rf /srv/oauthenticator
+#RUN git clone https://github.com/jupyter/dockerspawner.git /srv/dockerspawner && \
+#    pip install /srv/dockerspawner/. && \
+#    rm -rf /srv/dockerspawner && \
+#    git clone https://github.com/jupyter/oauthenticator.git /srv/oauthenticator && \
+#    pip install /srv/oauthenticator/. && \
+#    rm -rf /srv/oauthenticator
 
 
 # nopleats logging stuf
