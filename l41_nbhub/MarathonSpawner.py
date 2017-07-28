@@ -2,8 +2,11 @@ import time
 import os
 import json
 import requests
-from traitlets import Int, List, Unicode
+from traitlets import Dict, Int, List, Unicode
 from tornado import gen
+from tornado.web import HTTPError
+import sys
+import ast
 
 from jupyterhub.spawner import Spawner
 from .QueryUser import query_user
@@ -21,6 +24,9 @@ class MarathonSpawner(Spawner):
     home_basepath = Unicode('/home',
                          help="Basepath for user home directories",
                          config=True)
+    work_dir = Unicode('/home',
+        help="Working directory to pass to Marathon.",
+        config=True)
     env_url = Unicode('',
                          help="URL containing JSON environment variables to push to notebook server",
                          config=True)
@@ -55,15 +61,34 @@ class MarathonSpawner(Spawner):
     docker_image_name = Unicode(u'',
                                 help="Name of the docker image",
                                 config=True)
+    cmd = Unicode(u'',
+                         help="Command for container",
+                         config=True)
+
+    num_gpus = Int(
+        0,
+        help='Number of GPUs to mount onto the machine')
+
+    path_to_image_list = Unicode(u'',
+        help='Path to image list (local path or URL)',
+        config=True
+    )
+    runtime_constraints = List([],
+        help='Constraints specified at runtime that will be appended to self.marathon_constraints'
+    )
+    runtime_vols = List([],
+        help='Volumes specified at runtime that will be appended to self.volumes'
+    )
+    runtime_envs = Dict({},
+        help='Environment variables specified at runtime (overrides vars with the same name)'
+    )
 
     def __init__(self, *args, **kwargs):
-        print("Initializing MarathonSpawner.")
         super().__init__(*args, **kwargs)
         # All traitlets configurables are configured by now
         self.marathon = Marathon(self.marathon_host)
         self.gpu_resources = GPUResourceAllocator(self.resource_file_name,
-                                                    self.status_file_name)
-        print("Finished initializing MarathonSpawner.")
+                                                  self.status_file_name)
 
     def _expand_user_vars(self, string):
         """
@@ -89,11 +114,12 @@ class MarathonSpawner(Spawner):
      
     def get_env(self):
         env = super().get_env()
+        
         env.update(dict(
             # User Info
             USER=self.user.name,
             USER_ID=str(self._user_id_default()),
-            HOME='/home/%s'%self.user.name,
+            HOME='%s/%s/'%(self.home_basepath, self.user.name),
 
             # Container info
             CONTAINER_NAME=self.docker_image_name,
@@ -104,9 +130,9 @@ class MarathonSpawner(Spawner):
             JPY_COOKIE_NAME=self.user.server.cookie_name,
             JPY_BASE_URL=self.user.server.base_url,
             JPY_HUB_PREFIX=self.hub.server.base_url,
-            JPY_HUB_API_URL = 'http://%s:8081/hub/api'%self.hub_ip_connect,
+            JPY_HUB_API_URL = 'http://%s/hub/api'%self.hub_ip_connect,
         ))
-
+        
         if len(self.env_url) > 0:
             # get content
             try:
@@ -116,36 +142,64 @@ class MarathonSpawner(Spawner):
 
             for env_variable in parsed_data:
                 env[env_variable] = parsed_data[env_variable]
+
+        env.update(self.runtime_envs)
         return env
 
     def get_container_name(self):
         return '/%s/%s-notebook'%(self.marathon_group, self.user.name)
 
+    def _mount_nvidia(self, constraints, parameters, num_gpus):
+        # do nothing if no GPUs are requested
+        if num_gpus == 0:
+            pass
+        hostname, gpu_ids = self.gpu_resources.get_host_id(self.user.name, num_gpus)
+        driver_version = self.gpu_resources.get_driver_version(hostname)
+        constraints.extend([
+            ["hostname", "LIKE", hostname]
+        ])
+        parameters.extend([
+            {"key": "device", "value": "/dev/nvidiactl"},
+            {"key": "device", "value": "/dev/nvidia-uvm"},
+            {"key": "volume-driver", "value": "nvidia-docker"},
+            {"key": "volume", "value": "nvidia_driver_{}:/usr/local/nvidia:ro".format(driver_version)}
+        ])
+        for gpu_id in gpu_ids:
+            parameters.append(
+                {"key": "device", "value": "/dev/nvidia%d" % gpu_id}
+            )
+
     @gen.coroutine
     def start(self):
         print('HUB URI:', self.hub.api_url)
         container_name = self.get_container_name()
-        hostname, gpu_id = self.gpu_resources.get_host_id(self.user.name)
-        driver_version = self.gpu_resources.get_driver_version(hostname)
-        print('Hostname: {} GPU ID: {}'.format(hostname, gpu_id))
-        constraint = [['hostname', 'LIKE', hostname]]
-        parameters = [{'key':'workdir', 'value':os.path.join(self.home_basepath, self.user.name)}]
-        parameters.append({'key': 'device', 'value': '/dev/nvidiactl'})
-        parameters.append({'key': 'device', 'value': '/dev/nvidia-uvm'})
-        parameters.append({'key': 'device', 'value': '/dev/nvidia%d'%gpu_id})
-        parameters.append({'key': 'volume-driver', 'value': 'nvidia-docker'})
-        parameters.append({'key': 'volume', 'value': 'nvidia_driver_{}:/usr/local/nvidia:ro'.format(driver_version)})
-        cmd = "/bin/bash /srv/ganymede_nbserver/ganymede_nbserver.sh"
-        self.marathon.start_container(container_name,
+        constraints = []
+        parameters = []
+
+        if self.num_gpus > 0:
+            self._mount_nvidia(constraints, parameters, self.num_gpus)
+        
+        parameters.append(
+            {"key": "workdir", "value": "%s/%s" % (self.work_dir, self.user.name)}
+        )
+
+        volumes = self.volumes + self.runtime_vols
+        constraints = self.marathon_constraints + self.runtime_constraints + constraints
+
+        #print(constraints, file=sys.stderr, flush=True)
+        #print(parameters, file=sys.stderr, flush=True)
+        #print(volumes, file=sys.stderr, flush=True)
+        r = self.marathon.start_container(container_name,
                           self.docker_image_name,
-                          cmd,
-                          constraints=constraint,
+                          self.cmd, #cmd,
+                          constraints=constraints,
                           env=self.get_env(),
                           parameters = parameters,
                           mem_limit=self.mem_limit,
-                          volumes=self.volumes,
+                          volumes=volumes,
                           ports=self.ports,
                           network_mode=self.network_mode)
+        #print(r.text, file=sys.stderr, flush=True)
 
         for i in range(self.start_timeout):
             is_up = yield self.poll()
@@ -175,6 +229,7 @@ class MarathonSpawner(Spawner):
     @gen.coroutine
     def poll(self):
         container_info = self.marathon.get_container_status(self.get_container_name())
+        print(container_info, file=sys.stderr, flush=True)
 
         if container_info is None:
             return ""
@@ -193,3 +248,89 @@ class MarathonSpawner(Spawner):
         if "uid" not in response:
             raise HTTPError(403)
         return response['uid']
+
+    def get_image_list(self):
+        image_list = []
+        #print(self.path_to_image_list, file=sys.stderr, flush=True)
+        if os.path.exists(self.path_to_image_list):
+            with open(self.path_to_image_list) as f:
+                image_list = f.readlines()
+        else:
+            r = requests.get(self.path_to_image_list)
+            image_list = r.text.split("\n")
+        image_list = [line.strip().split(",") for line in image_list]
+        #print(image_list, file=sys.stderr, flush=True)
+        return image_list
+
+    def get_image_form(self):
+        html = "<select name=\"image\">"
+        for display_name, value in self.get_image_list():
+            html += "<option value=\"%s\">%s</option>" % (value, display_name)
+        html += "</select>"
+        return html
+
+    def _options_form_default(self):
+        defaults = {
+            "constraints": "[['hostname','LIKE','localhost']]",
+            "image_form": self.get_image_form(),
+            "vols": "['/same/host/and/container/path', ('/host/path', '/container/path')]",
+            "cmd": "",
+            "runtime_envs": "KEY1=VAL1\nKEY2=VAL2"
+        }
+
+        html = """
+        <label for="constraints">Marathon constraints:</label>
+        <input type="text" name="constraints" placeholder="{constraints}"/>
+
+        <label for="image">Docker image:</label>
+        {image_form}
+
+        <label for="num_gpus">Num GPUs:</label>
+        <select name="num_gpus">
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+        </select>
+
+        <label for="vols">Mounted volumes:</label>
+        <input type="text" name="vols" placeholder="{vols}"/>
+
+        <label for="runtime_envs">Environment variables (overwrites other env vars):</label>
+        <textarea name="runtime_envs" placeholder="{runtime_envs}"></textarea>
+        """.format(**defaults)
+        return html
+
+    def options_from_form(self, formdata):
+        options = {}
+        options['constraints'] = ''.join(formdata['constraints'])
+        if options['constraints']:
+            self.runtime_constraints = ast.literal_eval(options['constraints'])
+
+        options['image'] = ''.join(formdata['image'])
+        valid_images = [image_name for display_name, image_name in self.get_image_list()]
+        if options['image'] not in valid_images:
+            raise Exception("Invalid image specified.")
+        if options['image']:
+            self.docker_image_name = options['image']
+
+        options['num_gpus'] = ''.join(formdata['num_gpus'])
+        if options['num_gpus']:
+            self.num_gpus = int(''.join(formdata['num_gpus']))
+
+        options['volumes'] = ''.join(formdata['vols'])
+        if options['volumes']:
+            self.runtime_volumes = ast.literal_eval(options['volumes'])
+
+        options['runtime_envs'] = ''.join(formdata['runtime_envs'])
+        runtime_envs = {}
+        for line in options['runtime_envs'].split("\n"):
+            try:
+                eq_idx = line.index("=")
+                runtime_envs[line[:eq_idx]] = line[eq_idx+1:]
+            except ValueError:
+                continue
+        if runtime_envs:
+            self.runtime_envs = runtime_envs
+
+        return options
+

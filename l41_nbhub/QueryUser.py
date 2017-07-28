@@ -1,9 +1,12 @@
+import os
 import json
 import socket
 
 from tornado import gen
 from tornado.httpclient import HTTPClient, HTTPError
 from tornado.netutil import Resolver
+
+SOCKET_PATH = os.environ["RESTUSER_SOCK_PATH"]
 
 class UnixResolver(Resolver):
     """UnixResolver from https://gist.github.com/bdarnell/8641880"""
@@ -21,7 +24,7 @@ class UnixResolver(Resolver):
         result = yield self.resolver.resolve(host, port, *args, **kwargs)
         raise gen.Return(result)
 
-resolver = UnixResolver(resolver=Resolver(), socket_path='/var/run/restuser.sock')
+resolver = UnixResolver(resolver=Resolver(), socket_path=SOCKET_PATH)
 client = HTTPClient(resolver=resolver)
 
 def query_user(name):
