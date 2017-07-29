@@ -149,13 +149,13 @@ class MarathonSpawner(Spawner):
     def get_container_name(self):
         return '/%s/%s-notebook'%(self.marathon_group, self.user.name)
 
-    def _mount_nvidia(self, constraints, parameters, num_gpus):
+    def _mount_nvidia(self, parameters, num_gpus):
         # do nothing if no GPUs are requested
         if num_gpus == 0:
             pass
         hostname, gpu_ids = self.gpu_resources.get_host_id(self.user.name, num_gpus)
         driver_version = self.gpu_resources.get_driver_version(hostname)
-        constraints = [
+        self.runtime_constraints = [
             ["hostname", "LIKE", hostname]
         ]
         parameters.extend([
@@ -173,18 +173,18 @@ class MarathonSpawner(Spawner):
     def start(self):
         print('HUB URI:', self.hub.api_url)
         container_name = self.get_container_name()
-        constraints = self.marathon_constraints
+        self.runtime_constraints = self.marathon_constraints
         parameters = []
 
         if self.num_gpus > 0:
-            self._mount_nvidia(constraints, parameters, self.num_gpus)
+            self._mount_nvidia(parameters, self.num_gpus)
         
         parameters.append(
             {"key": "workdir", "value": "%s/%s" % (self.work_dir, self.user.name)}
         )
 
         volumes = self.volumes + self.runtime_vols
-        constraints = constraints + self.runtime_constraints
+        #constraints = constraints + self.runtime_constraints
 
         #print(constraints, file=sys.stderr, flush=True)
         #print(parameters, file=sys.stderr, flush=True)
@@ -192,7 +192,7 @@ class MarathonSpawner(Spawner):
         r = self.marathon.start_container(container_name,
                           self.docker_image_name,
                           self.cmd, #cmd,
-                          constraints=constraints,
+                          constraints=self.runtime_constraints,
                           env=self.get_env(),
                           parameters = parameters,
                           mem_limit=self.mem_limit,
@@ -258,7 +258,7 @@ class MarathonSpawner(Spawner):
         else:
             r = requests.get(self.path_to_image_list)
             image_list = r.text.split("\n")
-        image_list = [line.strip().split(",") for line in image_list]
+        image_list = [line.strip().split(",") for line in image_list if line]
         #print(image_list, file=sys.stderr, flush=True)
         return image_list
 
@@ -279,8 +279,8 @@ class MarathonSpawner(Spawner):
         }
 
         html = """
-        <label for="constraints">Marathon constraints:</label>
-        <input type="text" name="constraints" placeholder="{constraints}"/>
+        <label for="constraints">Marathon constraints: (disabled)</label>
+        <input type="text" name="constraints" placeholder="{constraints}" disabled/>
 
         <label for="image">Docker image:</label>
         {image_form}
@@ -302,9 +302,9 @@ class MarathonSpawner(Spawner):
 
     def options_from_form(self, formdata):
         options = {}
-        options['constraints'] = ''.join(formdata['constraints'])
-        if options['constraints']:
-            self.runtime_constraints = ast.literal_eval(options['constraints'])
+        #options['constraints'] = ''.join(formdata['constraints'])
+        #if options['constraints']:
+        #    self.runtime_constraints = ast.literal_eval(options['constraints'])
 
         options['image'] = ''.join(formdata['image'])
         valid_images = [image_name for display_name, image_name in self.get_image_list()]

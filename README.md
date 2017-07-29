@@ -20,6 +20,14 @@ docker build -t lab41/nbhub .
 
 Run the container using your Marathon API.
 
-You will need to ensure that jupyterhub_config.py and the files inside of config/ match your desired configuration.
+jupyterhub_config.py that comes with this repository is a sample. You will need to override the values with your default configuration.
 
+Some variables of note:
+
+env_file (JSON file containing environment vars)
+username_map_file (path to local file or URI of a dict mapping Github usernames to Linux usernames)
+resource_file_name (a text file describing GPU resources available in the Marathon cluster)
+status_file_name (JSON file describing current GPU resource allocations)
+env_url (URL to JSON file containing additional environment variables)
+path_to_image_list (path to local file or URI of a list of approved images)
 

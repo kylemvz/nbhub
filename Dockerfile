@@ -45,7 +45,8 @@ RUN apt-get install -y curl apt-transport-https ca-certificates && \
     mkdir -p /opt/user
 
 COPY . /srv/ganymede_hub
-RUN pip install /srv/ganymede_hub/. && \
+RUN pip install -r /srv/ganymede_hub/requirements.txt && \
+    pip install /srv/ganymede_hub/. && \
     rm -rf /srv/ganymede_hub
 
 # add in the helper files
@@ -56,7 +57,7 @@ ADD user/* /opt/user/
 # /opt/nopleats/start_user.sh is the entry point..
 # after running it you will be the user defined in L41_USERNAME
 
-ENTRYPOINT ["/opt/nopleats/start_user.sh"]
+CMD ["/opt/nopleats/start_user.sh"]
 
 # Eventually we can use pip to install, but for now we must install through git (see above).
 # The latest pypi release of oauthenticator is 0.2.0 from Jan 4, but we are using a feature (username_map) first introduced in commit a37ec45120e1058a19aee49707724c6b90470323 from Jan 7.
